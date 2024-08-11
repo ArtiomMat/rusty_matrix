@@ -76,11 +76,14 @@ fn set_cur(x: u16, y: u16) {
 }
 
 fn main() {
-    let mut size = get_size();
+    let mut rng = rand::thread_rng();
+
+    let mut size: [u16; 2] = [0,0];
     
     // Stores all the positions and stuff.
-    let mut rain: Vec<[u16; 2]> = Vec::new();
-    rain.push([2,3]);
+    // There are 3 values, x,y,t, t being the size of the tail.
+    let mut rain: Vec<[u16; 3]> = Vec::new();
+    
 
     loop {
         // If the size changes we reset the whole ordeal
@@ -88,25 +91,24 @@ fn main() {
         if new_size != size {
             rain.clear();
             size = new_size; // So nice of them to implement Copy,Clone traits :)
+            for _ in 0..200 {
+                rain.push([rng.gen_range(0..size[0]), rng.gen_range(0..size[1]), rng.gen_range(4..16)]);
+            }
         }
         
         clear();
        
-        let mut do_pop = false;
-
         // Render the drops and their tails & drop them
         for drop in &mut rain {
-            if drop[1] as i32 - TAIL_LEN as i32 >= size[1] as i32 {
-                // We can pop() because this drop is GUARANTEED to be the lowest drop if it goes
-                // out of frame, that is because we generate them so that they are never on the
-                // same height!!!!
-                // XXX: Maybe just reset y????
-                do_pop = true;
+            if drop[1] as i32 - drop[2] as i32 >= size[1] as i32 {
+                // Place it back up
+                drop[1] = 0;
+                drop[0] = rng.gen_range(0..size[0]);
                 continue;
             }
             
             if drop[1] > 0 {
-                let y_top = max(0, (drop[1] as i32) - TAIL_LEN as i32) as u16;
+                let y_top = max(0, (drop[1] as i32) - drop[2] as i32) as u16;
                 for y in y_top..=drop[1] {
                     set_cur(drop[0], y);
                     // Head of tail is light green
@@ -121,14 +123,9 @@ fn main() {
             drop[1] += 1;
         }
 
-        if do_pop {
-            return;
-            rain.pop();
-        }
-
         // set_cur(1,1);
         // put(GLYPHS[0], Color::Red);
-        sleep(Duration::new(0, 1_000_000 * 50));
+        sleep(Duration::new(0, 1_000_000 * 150));
     }
 }
 
