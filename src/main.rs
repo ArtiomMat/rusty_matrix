@@ -55,13 +55,13 @@ fn put(chr: char, color: Color) {
         _ => {}
     }
     print!("{}", chr);
-    stdout().flush().expect("Flush");
+    // stdout().flush().expect("flush");
 }
 
 /// Both clear and reset cursor position
 fn clear() {
     print!("\x1b[2J");
-    stdout().flush().expect("Flush");
+    // stdout().flush().expect("Flush");
 }
 
 fn glyph() -> char {
@@ -72,10 +72,12 @@ fn glyph() -> char {
 /// Set cursor, relative to top-left is [0,0]
 fn set_cur(x: u16, y: u16) {
    print!("\x1b[{};{}H", y+1, x+1);
-   stdout().flush().expect("Flush");
+   // stdout().flush().expect("Flush");
 }
 
 fn main() {
+    let mut buf: String = String::new();
+
     let mut rng = rand::thread_rng();
 
     let mut size: [u16; 2] = [0,0];
@@ -83,7 +85,6 @@ fn main() {
     // Stores all the positions and stuff.
     // There are 3 values, x,y,t, t being the size of the tail.
     let mut rain: Vec<[u16; 3]> = Vec::new();
-    
 
     loop {
         // If the size changes we reset the whole ordeal
@@ -92,7 +93,7 @@ fn main() {
             rain.clear();
             size = new_size; // So nice of them to implement Copy,Clone traits :)
             for _ in 0..200 {
-                rain.push([rng.gen_range(0..size[0]), rng.gen_range(0..size[1]), rng.gen_range(4..16)]);
+                rain.push([rng.gen_range(0..size[0]), rng.gen_range(0..size[1]), rng.gen_range(16..32)]);
             }
         }
         
@@ -122,6 +123,8 @@ fn main() {
 
             drop[1] += 1;
         }
+
+        stdout().flush().expect("Flush");
 
         // set_cur(1,1);
         // put(GLYPHS[0], Color::Red);
