@@ -1,6 +1,6 @@
 use nix::{libc, unistd};
-use std::io::{stdin, stdout, Write};
 use rand::Rng;
+use std::io::{stdin, stdout, Write};
 
 pub enum Color {
     Default, // Default color given by the terminal
@@ -32,72 +32,83 @@ pub struct Context {
     size: [u16; 2],
 }
 
+// TODO: Ctrl+C doesn't drop it though. Fuck.
+/// When context is dropped we wanna reshow the cursor.
+impl Drop for Context {
+    fn drop(&mut self) {
+        write_str("\x1b[?25h");
+    }
+}
+
 impl Context {
     pub fn new() -> Context {
+        write_str("\x1b[?25l"); // Hide the cursor
+        
+        flush();
         let mut ctx = Context {
             buf: Vec::new(),
-            size: [0,0],
+            size: [0, 0],
         };
         ctx.renew();
+        ctx.buf[200] = 100;
         ctx
     }
-   
+
     pub fn print(&mut self) {
         self.renew();
 
-        set_cur(0,0);
-        
+        // print!("\x1b[2J");
+        // set_cur(0, 0);
+        write_str("\x1b[H");
+
         // Render our nice little glyphs out of the symbols
         for s in &self.buf {
-            write_glyph(glyph(), match s {
-                0..100 => Color::DarkGreen,
-                100..200 => Color::Green,
-                _ => Color::White,
-            });
+            if *s < SYM_FALLOFF {
+                write_str(" ");
+                continue;
+            }
+
+            write_glyph(
+                glyph(),
+                match *s {
+                    SYM_FALLOFF..100 => Color::DarkGreen,
+                    100..200 => Color::Green,
+                    _ => Color::White,
+                },
+            );
         }
-        
+
         flush();
 
         // Finally update the actual state
         let mut rng = rand::thread_rng();
-        self.buf.insert(rng.gen_range(0..(self.size[0]*self.size[1])) as usize, 250);
+        self.buf[
+            rng.gen_range(0..(self.size[0] * self.size[1])) as usize
+        ] = 150;
     }
 
     /// If the size of the terminal changes then it reallocates the whole thing
     fn renew(&mut self) {
         let new_size = get_size();
         if new_size != self.size {
-            // Commented because it will throw a runtime error anyway, rust is safe :)
-            /*if new_size[0] < 2 || new_size[1] < 2 {
-                panic!("The size of the terminal is invalid.");
-            }*/
             self.size = new_size;
+            self.buf.clear();
             self.buf.resize((self.size[0] * self.size[1]) as usize, 0);
         }
     }
 }
 
-const GLYPHS: [char; 8] = [
-   'ぁ',
-   'け',
-   'だ',
-   'め',
-   'ぐ',
-   'ゐ',
-   'も',
-   'ぶ',
-];
-
+const GLYPHS: [char; 8] = ['ぁ', 'け', 'だ', 'め', 'ぐ', 'ゐ', 'も', 'ぶ'];
 
 /// Fall-off a symbol experiences each frame.
-const SYM_FALLOFF : u8 = 5;
+const SYM_FALLOFF: u8 = 5;
 
 /// Set cursor, relative to top-left is [0,0]
 fn set_cur(x: u16, y: u16) {
     write_str("\x1b[");
-    write_str(&(y+1).to_string());
+    write_str(&(y + 1).to_string());
     write_str(";");
-    write_str(&(y+1).to_string());
+    write_str(&(x + 1).to_string());
     write_str("H");
 }
 
@@ -149,13 +160,14 @@ fn write_glyph(c: char, fg: Color) {
 
         Color::Red => write_str("\x1b[91m"),
         Color::DarkRed => write_str("\x1b[31m"),
-        
+
         Color::Green => write_str("\x1b[92m"),
         Color::DarkGreen => write_str("\x1b[32m"),
-        
+
         _ => {}
     }
-    write_char(c);
+    write_str(&rand::thread_rng().gen_range('A'..'Z').to_string());
+    // write_char(c);
 }
 
 /// Flushes STDOUT_FILENO
