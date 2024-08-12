@@ -2,6 +2,7 @@ use nix::{libc, unistd};
 use rand::Rng;
 use std::io::{stdin, stdout, Write};
 
+#[derive(Clone, Copy)]
 pub enum Color {
     Default, // Default color given by the terminal
     White,
@@ -57,8 +58,6 @@ impl Context {
     pub fn print(&mut self) {
         self.renew();
 
-        // print!("\x1b[2J");
-        // set_cur(0, 0);
         write_str("\x1b[H");
 
         // Render our nice little glyphs out of the symbols
@@ -103,15 +102,6 @@ const GLYPHS: [char; 8] = ['ぁ', 'け', 'だ', 'め', 'ぐ', 'ゐ', 'も', 'ぶ
 /// Fall-off a symbol experiences each frame.
 const SYM_FALLOFF: u8 = 5;
 
-/// Set cursor, relative to top-left is [0,0]
-fn set_cur(x: u16, y: u16) {
-    write_str("\x1b[");
-    write_str(&(y + 1).to_string());
-    write_str(";");
-    write_str(&(x + 1).to_string());
-    write_str("H");
-}
-
 fn glyph() -> char {
     let mut rng = rand::thread_rng();
     GLYPHS[rng.gen_range(0..GLYPHS.len())]
@@ -140,7 +130,8 @@ fn write_str(s: &str) {
     }
 }
 
-// Prints out the unicode character
+/// Prints out the unicode character
+/*
 fn write_char(c: char) {
     let mut utf8_buf = [0u8; 4];
     let utf8_b = c.encode_utf8(&mut utf8_buf);
@@ -152,6 +143,7 @@ fn write_char(c: char) {
         );
     }
 }
+*/
 
 /// Writes a glyph into STDOUT
 fn write_glyph(c: char, fg: Color) {
