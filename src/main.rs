@@ -1,23 +1,18 @@
+mod bless;
+
 use nix::{libc, unistd};
 
 use std::vec::Vec;
-use std::time::Duration;
 use std::io::{stdout, stdin, Write};
 use std::thread::{sleep};
 use std::cmp::{min, max};
+use std::time::{Duration, Instant};
 
 use rand::seq::SliceRandom;
 use rand;
 use rand::Rng;
 
-enum Color {
-    Red,
-    DarkRed,
-    Green,
-    DarkGreen,
-    /*Blue,
-    DarkBlue,*/
-}
+const FRAME_TIME: Duration = Duration::new(0, 1_000_000 * 50);
 
 const TAIL_LEN : u16 = 5;
 
@@ -32,18 +27,6 @@ const GLYPHS: [char; 8] = [
    'ぶ',
 ];
 
-/// Uses unsafe stuff in it, but it's alright, returns [width,height] slash [cols,rows]
-fn get_size() -> [u16; 2] {
-    let mut ws: libc::winsize = unsafe { std::mem::zeroed() };
-    unsafe {
-        libc::ioctl(
-            libc::STDOUT_FILENO,
-            libc::TIOCGWINSZ, 
-            &mut ws as *mut libc::winsize
-        );
-    }
-    [ws.ws_col, ws.ws_row]
-}
 
 /// Prints a chracter with a color
 fn put(chr: char, color: Color) {
@@ -55,13 +38,11 @@ fn put(chr: char, color: Color) {
         _ => {}
     }
     print!("{}", chr);
-    // stdout().flush().expect("flush");
 }
 
 /// Both clear and reset cursor position
 fn clear() {
     print!("\x1b[2J");
-    // stdout().flush().expect("Flush");
 }
 
 fn glyph() -> char {
@@ -72,32 +53,34 @@ fn glyph() -> char {
 /// Set cursor, relative to top-left is [0,0]
 fn set_cur(x: u16, y: u16) {
    print!("\x1b[{};{}H", y+1, x+1);
-   // stdout().flush().expect("Flush");
 }
 
 fn main() {
-    let mut buf: String = String::new();
-
     let mut rng = rand::thread_rng();
 
     let mut size: [u16; 2] = [0,0];
-    
+
+    let x = &mut size;
+    let y = &size;
+
     // Stores all the positions and stuff.
     // There are 3 values, x,y,t, t being the size of the tail.
     let mut rain: Vec<[u16; 3]> = Vec::new();
 
     loop {
+        let now = Instant::now();
+
         // If the size changes we reset the whole ordeal
         let new_size = get_size();
         if new_size != size {
             rain.clear();
             size = new_size; // So nice of them to implement Copy,Clone traits :)
-            for _ in 0..200 {
+            for _ in 0..(1) {
                 rain.push([rng.gen_range(0..size[0]), rng.gen_range(0..size[1]), rng.gen_range(16..32)]);
             }
         }
         
-        clear();
+        // clear();
        
         // Render the drops and their tails & drop them
         for drop in &mut rain {
@@ -109,7 +92,7 @@ fn main() {
             }
             
             if drop[1] > 0 {
-                let y_top = max(0, (drop[1] as i32) - drop[2] as i32) as u16;
+                let y_top = max(0, drop[1] as i32 - drop[2] as i32) as u16;
                 for y in y_top..=drop[1] {
                     set_cur(drop[0], y);
                     // Head of tail is light green
@@ -128,7 +111,9 @@ fn main() {
 
         // set_cur(1,1);
         // put(GLYPHS[0], Color::Red);
-        sleep(Duration::new(0, 1_000_000 * 150));
+        if let Some(sleep_time) = FRAME_TIME.checked_sub(now.elapsed()) {
+            sleep(sleep_time);
+        }
     }
 }
 
