@@ -92,12 +92,12 @@ impl Context {
 
         flush();
         
-        // STEP 1! determine the new & conjured syms coming from the top.
+        // Determine the new & conjured syms coming from the top.
         // i is used to index the top row of the drawn buffer, to determine the top row on the bg
         // buffer.
         for i in 0..(self.size[0] as usize) {
             // Nothing there, so 50/50 we put a new one
-            if fg_buf[i] == 0 && (0..1).contains(&rand::thread_rng().gen_range(0..10)) {
+            if fg_buf[i] == 0 && (0..1).contains(&rand::thread_rng().gen_range(0..18)) {
                 bg_buf[i] = 255;
             }
             // Right from the previous frame already here
@@ -112,7 +112,7 @@ impl Context {
             }
         }
 
-        // Now for the rest, very simple stuff.
+        // Now for the rest, very simple stuff, just copy paste
         for i in (self.size[0] as usize)..((self.size[0]*self.size[1] - self.size[0]) as usize) {
             bg_buf[i] = fg_buf[i - self.size[0] as usize];
         }
