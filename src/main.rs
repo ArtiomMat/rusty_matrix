@@ -1,4 +1,4 @@
-mod bless;
+mod print;
 
 use std::time::*;
 use std::thread::sleep;
@@ -6,7 +6,7 @@ use std::thread::sleep;
 const FRAME_TIME: Duration = Duration::new(0, 1_000_000 * 250);
 
 fn main() {
-    let mut ctx = bless::Context::new();
+    let mut ctx = print::Context::new();
 
     loop {
         let now = Instant::now();

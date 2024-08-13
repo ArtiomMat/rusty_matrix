@@ -1,3 +1,5 @@
+//! The module that is responsible for printing
+
 use nix::{libc, unistd};
 use rand::Rng;
 use std::io::{stdin, stdout, Write};
@@ -27,8 +29,13 @@ impl Default for Color {
 pub type Sym = u8;
 
 pub struct Context {
-    /// Buffer storing all the syms, a flattened array
-    buf: Vec<Sym>,
+    /// Buffers storing all the syms, a flattened array
+    /// One is the background, second is the drawn one, the reason is because we need to
+    /// read and then directly write the data
+    /// buffer and it's really hard and inneficient to modify a single buffer directly.
+    bufs: (Vec<Sym>, Vec<Sym>),
+    /// Index of background buffer.
+    bg_buf_i: usize,
     /// Last recorded terminal size, used to reallocate buf as necessary
     size: [u16; 2],
 }
@@ -47,11 +54,11 @@ impl Context {
         
         flush();
         let mut ctx = Context {
-            buf: Vec::new(),
+            bufs: (Vec::new(), Vec::new()),
+            bg_buf_i: 0,
             size: [0, 0],
         };
         ctx.renew();
-        ctx.buf[200] = 100;
         ctx
     }
 
@@ -61,7 +68,7 @@ impl Context {
         write_str("\x1b[H");
 
         // Render our nice little glyphs out of the symbols
-        for s in &self.buf {
+        for s in self.fg_buf() {
             if *s < SYM_FALLOFF {
                 write_str(" ");
                 continue;
@@ -78,33 +85,59 @@ impl Context {
         }
 
         flush();
+        
+        // GODDAMN BORROW CHECKER
+        let size_0 = self.size[0] as usize;
+        
+        let (bg_buf,fg_buf) = if self.bg_buf_i == 0 {
+            (&mut self.bufs.0, &self.bufs.1)
+        } else {
+            (&mut self.bufs.1, &self.bufs.0)
+        };
 
-        // Finally update the actual state
-        let mut rng = rand::thread_rng();
-        self.buf[
-            rng.gen_range(0..(self.size[0] * self.size[1])) as usize
-        ] = 150;
+        // STEP 1! determine the new & conjured syms coming from the top.
+        // i is used to index the top row of the drawn buffer, to determine the top row on the bg
+        // buffer.
+        for i in 0..size_0 {
+            // Nothing there, so 50/50 we put a new one
+            if fg_buf[i] == 0 && rand::random() {
+                bg_buf[i] = 255;
+            }
+            // Right from the previous frame already here
+            else if fg_buf[i] == 255 {
+            }
+            // Is a part of a tail of the head
+            else {
+                
+            }
+        }
     }
+
 
     /// If the size of the terminal changes then it reallocates the whole thing
     fn renew(&mut self) {
         let new_size = get_size();
         if new_size != self.size {
             self.size = new_size;
-            self.buf.clear();
-            self.buf.resize((self.size[0] * self.size[1]) as usize, 0);
+            self.bufs.0.clear();
+            self.bufs.1.clear();
+            self.bufs.0.resize((self.size[0] * self.size[1]) as usize, 0);
+            self.bufs.1.resize((self.size[0] * self.size[1]) as usize, 0);
         }
     }
 }
-
-const GLYPHS: [char; 8] = ['ぁ', 'け', 'だ', 'め', 'ぐ', 'ゐ', 'も', 'ぶ'];
 
 /// Fall-off a symbol experiences each frame.
 const SYM_FALLOFF: u8 = 5;
 
 fn glyph() -> char {
     let mut rng = rand::thread_rng();
-    GLYPHS[rng.gen_range(0..GLYPHS.len())]
+    match rng.gen_range(0..=2) {
+        0 => rng.gen_range('a'..'z'),
+        1 => rng.gen_range('A'..'Z'),
+        // TODO: 2, for symbols, but IDK!
+        _ => '?' // Never gonna get here, just saying
+    }
 }
 
 /// Returns [width,height] slash [cols,rows].
@@ -126,6 +159,17 @@ fn write_str(s: &str) {
             libc::STDOUT_FILENO,
             s.as_ptr() as *const libc::c_void,
             s.len(),
+        );
+    }
+}
+
+/// Writes an ASCII, so ofc u8!
+fn write_ascii(c: u8) {
+    unsafe {
+        libc::write(
+            libc::STDOUT_FILENO,
+            std::mem::transmute(&c),
+            1,
         );
     }
 }
@@ -158,8 +202,7 @@ fn write_glyph(c: char, fg: Color) {
 
         _ => {}
     }
-    write_str(&rand::thread_rng().gen_range('A'..'Z').to_string());
-    // write_char(c);
+    write_ascii(c as u8);
 }
 
 /// Flushes STDOUT_FILENO
