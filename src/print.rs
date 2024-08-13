@@ -67,8 +67,14 @@ impl Context {
 
         write_str("\x1b[H");
 
+        let (bg_buf,fg_buf) = if self.bg_buf_i == 0 {
+            (&mut self.bufs.0, &self.bufs.1)
+        } else {
+            (&mut self.bufs.1, &self.bufs.0)
+        };
+
         // Render our nice little glyphs out of the symbols
-        for s in self.fg_buf() {
+        for s in fg_buf {
             if *s < SYM_FALLOFF {
                 write_str(" ");
                 continue;
@@ -77,8 +83,8 @@ impl Context {
             write_glyph(
                 glyph(),
                 match *s {
-                    SYM_FALLOFF..100 => Color::DarkGreen,
-                    100..200 => Color::Green,
+                    SYM_FALLOFF..130 => Color::DarkGreen,
+                    130..250 => Color::Green,
                     _ => Color::White,
                 },
             );
@@ -86,31 +92,32 @@ impl Context {
 
         flush();
         
-        // GODDAMN BORROW CHECKER
-        let size_0 = self.size[0] as usize;
-        
-        let (bg_buf,fg_buf) = if self.bg_buf_i == 0 {
-            (&mut self.bufs.0, &self.bufs.1)
-        } else {
-            (&mut self.bufs.1, &self.bufs.0)
-        };
-
         // STEP 1! determine the new & conjured syms coming from the top.
         // i is used to index the top row of the drawn buffer, to determine the top row on the bg
         // buffer.
-        for i in 0..size_0 {
+        for i in 0..(self.size[0] as usize) {
             // Nothing there, so 50/50 we put a new one
-            if fg_buf[i] == 0 && rand::random() {
+            if fg_buf[i] == 0 && (0..1).contains(&rand::thread_rng().gen_range(0..10)) {
                 bg_buf[i] = 255;
             }
             // Right from the previous frame already here
             else if fg_buf[i] == 255 {
+                bg_buf[i] = 255 - SYM_FALLOFF;
             }
             // Is a part of a tail of the head
-            else {
-                
+            else if (0..3).contains(&rand::thread_rng().gen_range(0..5)) && fg_buf[i] >= SYM_FALLOFF {
+                bg_buf[i] = fg_buf[i] - SYM_FALLOFF;
+            } else {
+                bg_buf[i] = 0;
             }
         }
+
+        // Now for the rest, very simple stuff.
+        for i in (self.size[0] as usize)..((self.size[0]*self.size[1] - self.size[0]) as usize) {
+            bg_buf[i] = fg_buf[i - self.size[0] as usize];
+        }
+        
+        self.bg_buf_i ^= 1;
     }
 
 
@@ -128,7 +135,7 @@ impl Context {
 }
 
 /// Fall-off a symbol experiences each frame.
-const SYM_FALLOFF: u8 = 5;
+const SYM_FALLOFF: u8 = 20;
 
 fn glyph() -> char {
     let mut rng = rand::thread_rng();
