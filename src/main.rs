@@ -243,7 +243,7 @@ fn main() {
 
     let mut ctx = Context::new();
 
-    if find_arg(&args, "-r").is_some() {
+    if find_arg(&args, "-r").is_some() || find_arg(&args, "--red").is_some() {
         ctx.red_fg();
     }
 
