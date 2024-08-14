@@ -45,6 +45,14 @@ pub struct Context {
     red_fg: bool,
 }
 
+// TODO: Ctrl+C doesn't drop it though. Fuck.
+/// When context is dropped we wanna reshow the cursor.
+impl Drop for Context {
+    fn drop(&mut self) {
+        self.write_str("\x1b[?25h");
+    }
+}
+
 impl Context {
     pub fn new() -> Context {
         println!("\x1b[?25l"); // Hide the cursor
@@ -78,10 +86,10 @@ impl Context {
             }
 
             self.write_glyph(
-                glyph(),
+                glyph(i),
                 match self.buf[i] {
-                    SYM_FALLOFF..180 => if self.red_fg { Color::DarkRed } else { Color::DarkGreen },
-                    180..252 => if self.red_fg { Color::Red } else { Color::Green },
+                    SYM_FALLOFF..150 => if self.red_fg { Color::DarkRed } else { Color::DarkGreen },
+                    150..250 => if self.red_fg { Color::Red } else { Color::Green },
                     _ => Color::White,
                 },
             );
@@ -99,7 +107,7 @@ impl Context {
         // the top row!
         for i in 0..(self.size[0] as usize) {
             // Nothing there, so 50/50 we put a new one
-            if self.buf[i] == 0 && (0..1).contains(&rand::thread_rng().gen_range(0..40)) {
+            if self.buf[i] == 0 && (0..1).contains(&rand::thread_rng().gen_range(0..24)) {
                 self.buf[i] = 255;
             }
             // Right from the previous frame already here
@@ -107,7 +115,7 @@ impl Context {
                 self.buf[i] = 255 - SYM_FALLOFF;
             }
             // Is a part of a tail of the head
-            else if (0..9).contains(&rand::thread_rng().gen_range(0..10)) && self.buf[i] >= SYM_FALLOFF {
+            else if (0..3).contains(&rand::thread_rng().gen_range(0..5)) && self.buf[i] >= SYM_FALLOFF {
                 self.buf[i] = self.buf[i] - SYM_FALLOFF;
             } else {
                 self.buf[i] = 0;
@@ -169,20 +177,29 @@ impl Context {
 }
 
 /// Fall-off a symbol experiences each frame.
-const SYM_FALLOFF: u8 = 5;
+const SYM_FALLOFF: u8 = 40;
 
-const FRAME_TIME: Duration = Duration::new(0, 1_000_000 * 60);
+const FRAME_TIME: Duration = Duration::new(0, 1_000_000 * 100);
 
 /// Third option of glyphs
+/// Must be 26 to match abc
 const GLYPH3: [u8; 26] = [b'?', b'!', b'/', b'@', b'#', b'^', b'%', b'&', b'*', b';', b'<', b'>', b'{', b'[', b'}', b']', b'-', b'(', b')', b'~', b'|', b'_', b'\\', b'$', b'+', b'='];
 
 /// Gives a random glyph
-fn glyph() -> char {
-    let mut rng = rand::thread_rng();
-    match rng.gen_range(0..=2) {
-        0 => rng.gen_range('a'..'z'),
-        1 => rng.gen_range('A'..'Z'),
-        _ => GLYPH3[rng.gen_range(0..GLYPH3.len())] as char // Never gonna get here, just saying
+fn glyph(i: usize) -> char {
+    // Random number based on i and 42.
+    let u = 42u32;
+    let i = i as u32;
+    let i = 36969*(i & 65535) + (i >> 16);
+    let u = 18000*(u & 65535) + (u >> 16);
+    let mut r = ((i << 16) + (u & 65535)) as usize;
+    r %= 26;
+
+    match rand::thread_rng().gen_range(0..=2) {
+        0 => ('a' as usize + r) as u8 as char,
+        1 => ('A' as usize + r) as u8 as char,
+        2 => GLYPH3[r % GLYPH3.len()] as char,
+        _ => '.'
     }
 }
 
@@ -197,6 +214,12 @@ pub fn get_size() -> [u16; 2] {
         );
     }
     [ws.ws_col, ws.ws_row]
+}
+
+pub fn rng(u: u32, v: u32) -> u32 {
+    let v = 36969*(v & 65535) + (v >> 16);
+    let u = 18000*(u & 65535) + (u >> 16);
+    (v << 16) + (u & 65535)
 }
 
 // /// Prints out the unicode character
@@ -223,26 +246,7 @@ fn find_arg(args: &Vec<String>, arg: &str) -> Option<usize> {
     return None;
 }
 
-extern "C" fn handle_sigint(_: i32) {
-    unsafe {
-        println!("\x1b[?25h"); // Show cursor again
-        libc::exit(0);
-    }
-}
-
 fn main() {
-    // SIGINT handler
-    unsafe {
-        let sa = libc::sigaction {
-            sa_sigaction: handle_sigint as libc::sighandler_t,
-            sa_mask: mem::zeroed(),
-            sa_flags: 0,
-            sa_restorer: None,
-        };
-        
-        _ = libc::sigaction(libc::SIGINT, &sa, std::ptr::null_mut());
-    }
-
     let args: Vec<String> = env::args().collect();
 
     if find_arg(&args, "-h").is_some() || find_arg(&args, "--help").is_some() {
