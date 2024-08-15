@@ -2,9 +2,8 @@ use std::time::*;
 use std::thread::sleep;
 use std::mem;
 use std::env;
-use std::io::{stdin, stdout, Write};
 
-use nix::{libc, unistd};
+use libc;
 
 use rand::Rng;
 
@@ -43,6 +42,7 @@ pub struct Context {
     /// Last recorded terminal size, used to reallocate buf as necessary
     size: [u16; 2],
     red_fg: bool,
+    jap_glyph: bool,
 }
 
 impl Context {
@@ -54,6 +54,7 @@ impl Context {
             buf: Vec::new(),
             size: [0, 0],
             red_fg: false,
+            jap_glyph: false,
         };
         ctx.renew();
         ctx
@@ -61,6 +62,10 @@ impl Context {
 
     pub fn red_fg(&mut self) {
         self.red_fg = true;
+    }
+
+    pub fn jap_glyph(&mut self) {
+        self.jap_glyph = true;
     }
 
     pub fn print(&mut self) {
@@ -78,7 +83,7 @@ impl Context {
             }
 
             self.write_glyph(
-                glyph(),
+                self.glyph(),
                 match self.buf[i] {
                     SYM_FALLOFF..180 => if self.red_fg { Color::DarkRed } else { Color::DarkGreen },
                     180..252 => if self.red_fg { Color::Red } else { Color::Green },
@@ -140,7 +145,7 @@ impl Context {
 
             _ => {}
         }
-        self.write_ascii(c as u8);
+        self.write_char(c);
     }
 
     /// Flushes self.str into STDOUT_FILENO
@@ -163,8 +168,23 @@ impl Context {
     }
 
     /// Writes an ASCII, so ofc u8!
-    fn write_ascii(&mut self, c: u8) {
-        self.str.push(c as char);
+    fn write_char(&mut self, c: char) {
+        self.str.push(c);
+    }
+    
+    /// Gives a random glyph
+    fn glyph(&self) -> char {
+        let mut rng = rand::thread_rng();
+
+        if self.jap_glyph {
+            return JAP_GLYPHS[rng.gen_range(0..JAP_GLYPHS.len())];
+        }
+        
+        match rng.gen_range(0..=2) {
+            0 => rng.gen_range('a'..'z'),
+            1 => rng.gen_range('A'..'Z'),
+            _ => GLYPH3[rng.gen_range(0..GLYPH3.len())] as char // Never gonna get here, just saying
+        }
     }
 }
 
@@ -173,18 +193,15 @@ const SYM_FALLOFF: u8 = 5;
 
 const FRAME_TIME: Duration = Duration::new(0, 1_000_000 * 60);
 
+const JAP_GLYPHS: [char; 57] = [
+    '｡', 'ｦ', 'ｧ', 'ｨ', 'ｩ', 'ｪ', 'ｫ', 'ｬ', 'ｭ', 'ｮ', 'ｯ', 'ｰ', 'ｱ', 'ｲ', 'ｳ', 'ｴ', 'ｵ', 
+    'ｶ', 'ｷ', 'ｸ', 'ｹ', 'ｺ', 'ｻ', 'ｼ', 'ｽ', 'ｾ', 'ｿ', 'ﾀ', 'ﾁ', 'ﾂ', 'ﾃ', 'ﾄ', 'ﾅ', 'ﾆ', 'ﾇ', 'ﾈ', 'ﾉ', 
+    'ﾊ', 'ﾋ', 'ﾌ', 'ﾍ', 'ﾎ', 'ﾏ', 'ﾐ', 'ﾑ', 'ﾒ', 'ﾓ', 'ﾔ', 'ﾕ', 'ﾖ', 'ﾗ', 'ﾘ', 'ﾙ', 'ﾚ', 'ﾛ', 'ﾜ', 'ﾝ',
+];
+
 /// Third option of glyphs
 const GLYPH3: [u8; 26] = [b'?', b'!', b'/', b'@', b'#', b'^', b'%', b'&', b'*', b';', b'<', b'>', b'{', b'[', b'}', b']', b'-', b'(', b')', b'~', b'|', b'_', b'\\', b'$', b'+', b'='];
 
-/// Gives a random glyph
-fn glyph() -> char {
-    let mut rng = rand::thread_rng();
-    match rng.gen_range(0..=2) {
-        0 => rng.gen_range('a'..'z'),
-        1 => rng.gen_range('A'..'Z'),
-        _ => GLYPH3[rng.gen_range(0..GLYPH3.len())] as char // Never gonna get here, just saying
-    }
-}
 
 /// Returns [width,height] slash [cols,rows].
 pub fn get_size() -> [u16; 2] {
@@ -249,6 +266,7 @@ fn main() {
         println!("Rusty Matrix by Artiom.");
         println!("-h,--help: Help.");
         println!("-r,--red: Red version because I have a red theme.");
+        println!("-j,--japanese: Write half-width katana characters.");
         return;
     }
 
@@ -258,6 +276,10 @@ fn main() {
         ctx.red_fg();
     }
 
+    if find_arg(&args, "-j").is_some() || find_arg(&args, "--japanese").is_some() {
+        ctx.jap_glyph();
+    }
+    
     mem::drop(args);
 
     loop {
